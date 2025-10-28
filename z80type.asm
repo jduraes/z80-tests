@@ -56,6 +56,12 @@ ARGDEBUG:
 	MOV	M,A
 	
 NOARGS:
+	CALL	TESTZ180
+	LXI	H,ISZ180
+	MOV	M,A		; store result to ISZ180
+	CPI	0
+	JNZ	SKIPTESTS	; skip tests if Z180 detected
+	
 	CALL	TESTCMOS
 	LXI	H,ISCMOS
 	MOV	M,A		; store result to ISCMOS
@@ -67,6 +73,18 @@ NOARGS:
 	CALL	TESTXY
 	LXI	H,XYRESULT
 	MOV	M,A
+	JMP	DEBUGSECTION
+
+SKIPTESTS:
+	XRA	A
+	LXI	H,ISCMOS
+	MOV	M,A
+	LXI	H,ISU880
+	MOV	M,A
+	LXI	H,XYRESULT
+	MOV	M,A
+
+DEBUGSECTION:
 
 ;-------------------------------------------------------------------------
 ; Debug
@@ -74,6 +92,12 @@ NOARGS:
 	MOV	A,M
 	CPI	0
 	JZ	DETECTCPU
+	
+	LXI	H,ISZ180
+	MOV	A,M
+	LXI	D,MSGRAWZ180	; display Z180 test result
+	CALL	PRINTSTR
+	CALL	PRINTHEX
 	
 
 	LXI	H,ISCMOS
@@ -106,7 +130,17 @@ DETECTCPU:
 	LXI	D,MSGCPUTYPE
 	CALL	PRINTSTR
 
+; check for Z180 CPU
+
+	LXI	H,ISZ180
+	MOV	A,M
+	CPI	0		; Is it a Z180?
+	JZ	CHECKU880	; No, check other CPUs
+	LXI	D,MSGZ180
+	JMP	DONE
+
 ; check for U880 CPU
+CHECKU880:
 
 	LXI	H,ISU880
 	MOV	A,M
@@ -204,6 +238,30 @@ DONE:
 	CALL	PRINTSTR
 	RET			; RETURN TO CP/M
 	
+;-------------------------------------------------------------------------
+; TESTZ180 - Test if the CPU is a Hitachi HD64180 / Zilog Z180
+; Uses the MLT BC instruction which is unique to Z180
+; Input:
+;	None
+; Output:
+;	A = 00 - Not Z180
+;	A = FF - Z180
+;-------------------------------------------------------------------------
+TESTZ180:
+	DI
+	LXI	B,00506H	; B=5, C=6
+	DB	0EDH,04CH	; MLT BC - Z180 instruction
+				; On Z180: BC = B * C = 5 * 6 = 30 (1EH)
+				; On Z80: This is a NOP, BC unchanged
+	EI
+	MOV	A,B
+	CPI	05H		; Is B still 5?
+	MVI	A,00H
+	JZ	TESTZ180DONE	; Yes, it's a Z80
+	MVI	A,0FFH		; No, it's a Z180
+TESTZ180DONE:
+	RET
+
 ;-------------------------------------------------------------------------
 ; TESTCMOS - Test if the CPU is a CMOS variety according to OUT (C),0 test
 ; Note: CMOS Sharp LH5080A is reported as NMOS
@@ -600,6 +658,7 @@ PRINTSTR:
 	RET
 
 DEBUG		DB	0
+ISZ180		DB	0
 ISCMOS		DB	0
 ISU880		DB	0
 XYRESULT	DB	0
@@ -609,11 +668,13 @@ YFCOUNT		DW	0
 MSGSIGNIN	DB	'Z80 Processor Type Detection (C) 2024 Sergey Kiselev'
 MSGCRLF		DB	0DH,0AH,'$'
 MSGUSAGE	DB	'Invalid argument. Usage: z80type [/D]',0DH,0AH,'$'
-MSGRAWCMOS	DB	'Raw results:       CMOS: $'
+MSGRAWZ180	DB	'Raw results:       Z180: $'
+MSGRAWCMOS	DB	' CMOS: $'
 MSGFLAGS	DB	'XF/YF flags test:  $'
 MSGRAWU880	DB	' U880: $'
 MSGRAWXY	DB	' XF/YF: $'
 MSGCPUTYPE	DB	'Detected CPU type: $'
+MSGZ180		DB	'Hitachi HD64180 / Zilog Z180$'
 MSGU880NEW	DB	'Newer MME U880, Thesys Z80, Microelectronica MMN 80CPU$'
 MSGU880OLD	DB	'Older MME U880$'
 MSGSHARPLH5080A	DB	'Sharp LH5080A$'
